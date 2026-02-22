@@ -1,0 +1,43 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# ── Node.js / Next.js ─────────────────────────────────────────────────────────
+node_modules/
+.next/
+out/
+.cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tsbuildinfo
+next-env.d.ts
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+mosquitto/data/*.db
+mosquitto/log/*.log
+
+# ── OS / Editor ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+*.log
+*.tmp

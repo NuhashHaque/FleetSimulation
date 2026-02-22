@@ -1,0 +1,71 @@
+version: "3.8"
+
+services:
+  # ── Phase 1: MQTT Broker ─────────────────────────────────────────────────────
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: fleet_broker
+    ports:
+      - "1884:1883"   # MQTT TCP (host:1884 → container:1883)
+      - "9002:9001"   # MQTT WebSocket (browser clients)
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    networks:
+      - fleet_net
+    healthcheck:
+      test: ["CMD", "mosquitto_pub", "-h", "localhost", "-t", "health", "-m", "ping", "-q", "0"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Phase 2: Simulation Engine ───────────────────────────────────────────────
+  simulator:
+    build: ./simulator
+    container_name: fleet_simulator
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    environment:
+      - BROKER_HOST=mosquitto
+      - BROKER_PORT=1883
+    networks:
+      - fleet_net
+    restart: on-failure
+
+  # ── Next.js Control Room (primary UI) ───────────────────────────────────────
+  nextjs-dashboard:
+    build: ./nextjs-dashboard
+    container_name: fleet_nextjs
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    ports:
+      - "3000:3000"   # → http://localhost:3000
+    environment:
+      # The browser connects to the broker WebSocket from the host machine
+      - NEXT_PUBLIC_BROKER_WS_URL=ws://localhost:9002
+    networks:
+      - fleet_net
+    restart: on-failure
+
+  # ── Phase 3 & 4: Streamlit Dashboard (legacy) ────────────────────────────────
+  dashboard:
+    build: ./dashboard
+    container_name: fleet_dashboard
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    ports:
+      - "8502:8501"   # Streamlit UI → http://localhost:8502
+    environment:
+      - BROKER_HOST=mosquitto
+      - BROKER_PORT=1883
+    networks:
+      - fleet_net
+    restart: on-failure
+
+networks:
+  fleet_net:
+    driver: bridge
