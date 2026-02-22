@@ -32,7 +32,7 @@ import time
 
 import paho.mqtt.client as mqtt
 
-from config import DWELL_TIME, TICK_RATE
+from config import DWELL_TIME, TICK_RATE, TIME_SCALE
 from physics import haversine_km, lerp_pos
 
 
@@ -125,7 +125,7 @@ class Bus:
             elif action == "RESTART":
                 self._reset()
                 self.state = "RUNNING"
-                self.speed = random.uniform(20, 80)
+                self.speed = random.uniform(30, 60)
 
     def step(self):
         """Advance the bus by one 1-second simulation tick."""
@@ -143,7 +143,9 @@ class Bus:
             p1, p2 = self._segment_endpoints()
             seg_dist_km  = haversine_km(p1, p2)
             speed_km_s   = self.speed / 3600.0
-            dt           = (speed_km_s / seg_dist_km) if seg_dist_km > 0 else 1.0
+            # TIME_SCALE warps simulated time: dt jumps TIME_SCALE× larger per tick
+            # while speed stays realistic (km/h) and TICK_RATE stays 1 Hz.
+            dt           = (speed_km_s / seg_dist_km) * TIME_SCALE if seg_dist_km > 0 else 1.0
             self.seg_t  += dt
 
             if self.seg_t >= 1.0:
