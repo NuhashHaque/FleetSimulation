@@ -28,38 +28,39 @@ import paho.mqtt.client as mqtt
 # ── Configuration ─────────────────────────────────────────────────────────────
 BROKER_HOST: str = os.environ.get("BROKER_HOST", "localhost")
 BROKER_PORT: int = int(os.environ.get("BROKER_PORT", 1883))
-TICK_RATE: float = 1.0  # seconds (1 Hz)
+TICK_RATE: float  = 1.0  # seconds (1 Hz)
+DWELL_TIME: int   = 3    # seconds a bus waits at each named station
 
 # ── Route Definitions (Dhaka, Bangladesh) ─────────────────────────────────────
 # 4 routes × 5 waypoints each.  Real-world corridors for authenticity.
 ROUTES: dict = {
     "BUS_01": [  # Mirpur → Motijheel corridor
-        {"lat": 23.8223, "lon": 90.3654},  # St.1  Mirpur 10
-        {"lat": 23.8100, "lon": 90.3750},  # St.2  Mirpur 2
-        {"lat": 23.7982, "lon": 90.3872},  # St.3  Shyamoli
-        {"lat": 23.7806, "lon": 90.3993},  # St.4  Farmgate
-        {"lat": 23.7279, "lon": 90.4188},  # St.5  Motijheel
+        {"lat": 23.8223, "lon": 90.3654, "name": "Mirpur 10"},
+        {"lat": 23.8100, "lon": 90.3750, "name": "Mirpur 2"},
+        {"lat": 23.7982, "lon": 90.3872, "name": "Shyamoli"},
+        {"lat": 23.7806, "lon": 90.3993, "name": "Farmgate"},
+        {"lat": 23.7279, "lon": 90.4188, "name": "Motijheel"},
     ],
     "BUS_02": [  # Uttara → Gulshan corridor
-        {"lat": 23.8759, "lon": 90.3795},  # St.1  Uttara
-        {"lat": 23.8469, "lon": 90.3944},  # St.2  Airport
-        {"lat": 23.8233, "lon": 90.4152},  # St.3  Banani
-        {"lat": 23.7937, "lon": 90.4066},  # St.4  Gulshan 1
-        {"lat": 23.7808, "lon": 90.4152},  # St.5  Gulshan 2
+        {"lat": 23.8759, "lon": 90.3795, "name": "Uttara"},
+        {"lat": 23.8469, "lon": 90.3944, "name": "Airport"},
+        {"lat": 23.8233, "lon": 90.4152, "name": "Banani"},
+        {"lat": 23.7937, "lon": 90.4066, "name": "Gulshan 1"},
+        {"lat": 23.7808, "lon": 90.4152, "name": "Gulshan 2"},
     ],
     "BUS_03": [  # Demra → Sadarghat corridor
-        {"lat": 23.7208, "lon": 90.4800},  # St.1  Demra
-        {"lat": 23.7150, "lon": 90.4600},  # St.2  Jatrabari
-        {"lat": 23.7100, "lon": 90.4400},  # St.3  Postogola
-        {"lat": 23.7192, "lon": 90.4200},  # St.4  Sutrapur
-        {"lat": 23.7185, "lon": 90.4076},  # St.5  Sadarghat
+        {"lat": 23.7208, "lon": 90.4800, "name": "Demra"},
+        {"lat": 23.7150, "lon": 90.4600, "name": "Jatrabari"},
+        {"lat": 23.7100, "lon": 90.4400, "name": "Postogola"},
+        {"lat": 23.7192, "lon": 90.4200, "name": "Sutrapur"},
+        {"lat": 23.7185, "lon": 90.4076, "name": "Sadarghat"},
     ],
     "BUS_04": [  # Dhanmondi → New Market corridor
-        {"lat": 23.7461, "lon": 90.3742},  # St.1  Dhanmondi 27
-        {"lat": 23.7524, "lon": 90.3804},  # St.2  Dhanmondi 15
-        {"lat": 23.7590, "lon": 90.3880},  # St.3  Science Lab
-        {"lat": 23.7640, "lon": 90.3950},  # St.4  Elephant Road
-        {"lat": 23.7820, "lon": 90.4050},  # St.5  New Market
+        {"lat": 23.7461, "lon": 90.3742, "name": "Dhanmondi 27"},
+        {"lat": 23.7524, "lon": 90.3804, "name": "Dhanmondi 15"},
+        {"lat": 23.7590, "lon": 90.3880, "name": "Science Lab"},
+        {"lat": 23.7640, "lon": 90.3950, "name": "Elephant Road"},
+        {"lat": 23.7820, "lon": 90.4050, "name": "New Market"},
     ],
 }
 
@@ -127,7 +128,11 @@ class Bus:
         self.seg_t = 0.0
         self.speed = 0.0
         self.trip_count = 0
-        self.pos = dict(self.waypoints[0])
+        wp0 = self.waypoints[0]
+        self.pos               = {"lat": wp0["lat"], "lon": wp0["lon"]}
+        self.at_stop: bool     = False
+        self.dwell_remaining: int = 0
+        self.current_stop_name: str = wp0["name"]
 
     def _segment_endpoints(self):
         """Return (p1, p2) for the current segment according to direction."""
@@ -145,7 +150,7 @@ class Bus:
     # ── Public API (called from MQTT thread) ──────────────────────────────────
 
     def handle_command(self, action: str):
-        """Apply a START / PAUSE / STOP command from the dashboard."""
+        """Apply a START / PAUSE / STOP / RESTART command from the dashboard."""
         with self._lock:
             print(f"[{self.bus_id}] CMD={action}  state={self.state}")
             if action == "START":
@@ -160,6 +165,11 @@ class Bus:
             elif action == "STOP":
                 if self.state in ("RUNNING", "PAUSED"):
                     self._reset()
+            elif action == "RESTART":
+                # Reset to Station 1 and immediately begin running (any state)
+                self._reset()
+                self.state = "RUNNING"
+                self.speed = random.uniform(30, 60)
 
     # ── Movement tick (called every second from bus thread) ───────────────────
 
@@ -168,6 +178,13 @@ class Bus:
         with self._lock:
             if self.state != "RUNNING":
                 return
+
+            # ── Dwell at station ──────────────────────────────────────────────
+            if self.at_stop:
+                self.dwell_remaining -= 1
+                if self.dwell_remaining <= 0:
+                    self.at_stop = False
+                return                          # stay put until dwell expires
 
             p1, p2 = self._segment_endpoints()
             seg_dist_km = haversine_km(p1, p2)
@@ -188,35 +205,57 @@ class Bus:
                     self.seg_idx = 0
                     if self.direction == "FORWARD":
                         self.direction = "RETURN"
-                        self.pos = dict(self.waypoints[self.n_segs])   # last station
+                        wp = self.waypoints[self.n_segs]           # terminal station
                     else:
                         self.direction = "FORWARD"
                         self.trip_count += 1
-                        self.pos = dict(self.waypoints[0])             # back to station 1
+                        wp = self.waypoints[0]                     # back to Station 1
                 else:
                     # Arrived at an intermediate station
                     if self.direction == "FORWARD":
-                        self.pos = dict(self.waypoints[self.seg_idx])
+                        wp = self.waypoints[self.seg_idx]
                     else:
-                        self.pos = dict(self.waypoints[self.n_segs - self.seg_idx])
+                        wp = self.waypoints[self.n_segs - self.seg_idx]
 
-                # Pick a fresh random speed for the next segment
+                self.pos = {"lat": wp["lat"], "lon": wp["lon"]}
+                self.current_stop_name = wp["name"]
+                # Bus dwells here before moving on
+                self.at_stop = True
+                self.dwell_remaining = DWELL_TIME
+                # Fresh random speed for the next segment
                 self.speed = random.uniform(30, 60)
+                print(f"[{self.bus_id}] AT STOP → {wp['name']}  ({self.direction})")
             else:
                 # ── Mid-segment: interpolate position ────────────────────────
                 self.pos = lerp_pos(p1, p2, self.seg_t)
+                self.current_stop_name = ""
+
+    def _next_stop_name(self) -> str:
+        """Return the name of the station the bus is heading towards."""
+        if self.direction == "FORWARD":
+            next_idx = self.seg_idx + 1
+            if next_idx <= self.n_segs:
+                return self.waypoints[next_idx]["name"]
+        else:
+            next_idx = self.n_segs - self.seg_idx - 1
+            if next_idx >= 0:
+                return self.waypoints[next_idx]["name"]
+        return ""
 
     def telemetry(self) -> dict:
         """Return a snapshot of bus state as the standard telemetry JSON."""
         with self._lock:
             return {
-                "bus_id":     self.bus_id,
-                "status":     self.state,
-                "pos":        dict(self.pos),
-                "speed":      round(self.speed, 1),
-                "direction":  self.direction,
-                "progress":   self._overall_progress(),
-                "trip_count": self.trip_count,
+                "bus_id":       self.bus_id,
+                "status":       self.state,
+                "pos":          dict(self.pos),
+                "speed":        round(self.speed, 1) if not self.at_stop else 0.0,
+                "direction":    self.direction,
+                "progress":     self._overall_progress(),
+                "full_trips":   self.trip_count,
+                "at_stop":      self.at_stop,
+                "current_stop": self.current_stop_name if self.at_stop else None,
+                "next_stop":    self._next_stop_name(),
             }
 
     # ── Main loop ─────────────────────────────────────────────────────────────

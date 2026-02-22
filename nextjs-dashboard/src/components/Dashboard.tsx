@@ -14,8 +14,11 @@ export interface BusTelemetry {
   pos: { lat: number; lon: number };
   speed: number;
   direction: Direction;
-  progress: number;   // 0–1, within the current leg
-  trip_count: number;
+  progress: number;      // 0–1, within the current leg
+  full_trips: number;    // increments after each complete FORWARD+RETURN cycle
+  at_stop: boolean;      // true while bus is dwelling at a station
+  current_stop: string | null;  // station name when at_stop, else null
+  next_stop: string;     // name of the next station ahead
 }
 
 const BUS_IDS = ["BUS_01", "BUS_02", "BUS_03", "BUS_04"];
@@ -25,6 +28,13 @@ const ROUTE_LABELS: Record<string, string> = {
   BUS_02: "Uttara ↔ Gulshan 2",
   BUS_03: "Demra ↔ Sadarghat",
   BUS_04: "Dhanmondi 27 ↔ New Market",
+};
+
+const ROUTE_STATIONS: Record<string, string[]> = {
+  BUS_01: ["Mirpur 10", "Mirpur 2", "Shyamoli", "Farmgate", "Motijheel"],
+  BUS_02: ["Uttara", "Airport", "Banani", "Gulshan 1", "Gulshan 2"],
+  BUS_03: ["Demra", "Jatrabari", "Postogola", "Sutrapur", "Sadarghat"],
+  BUS_04: ["Dhanmondi 27", "Dhanmondi 15", "Science Lab", "Elephant Rd", "New Market"],
 };
 
 const initialState = (): Record<string, BusTelemetry> =>
@@ -38,7 +48,10 @@ const initialState = (): Record<string, BusTelemetry> =>
         speed: 0,
         direction: "FORWARD",
         progress: 0,
-        trip_count: 0,
+        full_trips: 0,
+        at_stop: false,
+        current_stop: null,
+        next_stop: "",
       } as BusTelemetry,
     ])
   );
@@ -94,7 +107,7 @@ export default function Dashboard() {
   }, []);
 
   // ── Command publisher ──────────────────────────────────────────────────────
-  const sendCommand = (busId: string, action: "START" | "PAUSE" | "STOP") => {
+  const sendCommand = (busId: string, action: "START" | "PAUSE" | "STOP" | "RESTART") => {
     clientRef.current?.publish(
       `fleet/bus/${busId}/command`,
       JSON.stringify({ action }),
@@ -132,7 +145,8 @@ export default function Dashboard() {
             key={id}
             data={buses[id]}
             routeLabel={ROUTE_LABELS[id]}
-            onCommand={(action: "START" | "PAUSE" | "STOP") => sendCommand(id, action)}
+            stations={ROUTE_STATIONS[id]}
+            onCommand={(action: "START" | "PAUSE" | "STOP" | "RESTART") => sendCommand(id, action)}
           />
         ))}
       </div>
