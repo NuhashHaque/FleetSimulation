@@ -50,22 +50,6 @@ services:
       - fleet_net
     restart: on-failure
 
-  # ── Phase 3 & 4: Streamlit Dashboard (legacy) ────────────────────────────────
-  dashboard:
-    build: ./dashboard
-    container_name: fleet_dashboard
-    depends_on:
-      mosquitto:
-        condition: service_healthy
-    ports:
-      - "8502:8501"   # Streamlit UI → http://localhost:8502
-    environment:
-      - BROKER_HOST=mosquitto
-      - BROKER_PORT=1883
-    networks:
-      - fleet_net
-    restart: on-failure
-
 networks:
   fleet_net:
     driver: bridge
