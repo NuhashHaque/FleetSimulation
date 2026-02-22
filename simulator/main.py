@@ -229,6 +229,10 @@ class Bus:
                 # ── Mid-segment: interpolate position ────────────────────────
                 self.pos = lerp_pos(p1, p2, self.seg_t)
                 self.current_stop_name = ""
+                # Subtle speed variation each tick (±3 km/h, clamped 30–60 km/h)
+                self.speed = round(
+                    max(30.0, min(60.0, self.speed + random.uniform(-3.0, 3.0))), 1
+                )
 
     def _next_stop_name(self) -> str:
         """Return the name of the station the bus is heading towards."""

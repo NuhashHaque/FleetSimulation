@@ -17,13 +17,14 @@ interface Props {
 }
 
 // ── Progress bar ──────────────────────────────────────────────────────────────
-function ProgressBar({ value, label, color }: { value: number; label: string; color: string }) {
+function ProgressBar({ value, from, to, color }: { value: number; from: string; to: string; color: string }) {
   const pct = Math.round(value * 100);
   return (
     <div className="space-y-1">
-      <div className="flex justify-between text-xs text-slate-400">
-        <span>{label}</span>
-        <span>{pct}%</span>
+      <div className="flex items-center justify-between gap-1">
+        <span className="text-[10px] text-slate-400 truncate max-w-[38%]">{from}</span>
+        <span className="text-[10px] text-slate-500 shrink-0">{pct}%</span>
+        <span className="text-[10px] text-slate-400 truncate max-w-[38%] text-right">{to}</span>
       </div>
       <div className="h-2 w-full overflow-hidden rounded-full bg-slate-700">
         <div
@@ -46,67 +47,69 @@ interface RouteStripProps {
 
 function RouteStrip({ stations, progress, direction, atStop, currentStop }: RouteStripProps) {
   const nSegs = stations.length - 1;
-  // busIdx: float 0…nSegs — 0 = Station 1 end, nSegs = Station N end
-  const busIdx =
-    direction === "FORWARD" ? progress * nSegs : nSegs * (1 - progress);
+  const busIdx = direction === "FORWARD" ? progress * nSegs : nSegs * (1 - progress);
   const filledPct = (busIdx / nSegs) * 100;
 
   return (
-    <div className="relative w-full" style={{ height: 58 }}>
-      {/* Base line */}
-      <div
-        className="absolute left-0 right-0 h-px bg-slate-600"
-        style={{ top: 6 }}
-      />
-      {/* Filled (travelled) line */}
-      <div
-        className="absolute h-px bg-sky-400 transition-all duration-700"
-        style={{ top: 6, left: 0, width: `${filledPct}%` }}
-      />
-      {/* Bus emoji indicator */}
-      <div
-        className="absolute text-sm leading-none transition-all duration-700"
-        style={{ top: -10, left: `${filledPct}%`, transform: "translateX(-50%)" }}
-      >
-        🚌
-      </div>
+    <div className="w-full space-y-1">
 
-      {/* Station dots + labels */}
-      {stations.map((name, i) => {
-        const pct = (i / nSegs) * 100;
-        // Station is "reached" if bus has passed or is at it
-        const reached =
-          direction === "FORWARD" ? i <= busIdx + 0.05 : i >= busIdx - 0.05;
-        const isCurrent = atStop && currentStop === name;
-
-        return (
-          <div
-            key={name}
-            className="absolute flex flex-col items-center"
-            style={{ left: `${pct}%`, top: 0, transform: "translateX(-50%)" }}
-          >
-            {/* Dot */}
+      {/* ── Track row: bus + line + dots ── */}
+      <div className="relative w-full h-6">
+        {/* Base track */}
+        <div className="absolute inset-x-0 h-px bg-slate-600" style={{ top: "50%" }} />
+        {/* Filled segment */}
+        <div
+          className="absolute h-px bg-sky-400 transition-all duration-700"
+          style={{ top: "50%", left: 0, width: `${filledPct}%` }}
+        />
+        {/* Bus emoji */}
+        <div
+          className="absolute -translate-x-1/2 transition-all duration-700 select-none"
+          style={{ top: 0, left: `${filledPct}%`, fontSize: 14, lineHeight: "14px" }}
+        >
+          🚌
+        </div>
+        {/* Dots */}
+        {stations.map((name, i) => {
+          const pct = (i / nSegs) * 100;
+          const reached = direction === "FORWARD" ? i <= busIdx + 0.05 : i >= busIdx - 0.05;
+          const isCurrent = atStop && currentStop === name;
+          return (
             <div
-              className={`w-3 h-3 rounded-full border-2 transition-all ${
+              key={name}
+              className={`absolute w-3 h-3 rounded-full border-2 -translate-x-1/2 -translate-y-1/2 transition-all ${
                 isCurrent
                   ? "bg-amber-400 border-amber-300 ring-2 ring-amber-400/40"
                   : reached
                   ? "bg-sky-400 border-sky-400"
                   : "bg-slate-800 border-slate-500"
               }`}
+              style={{ left: `${pct}%`, top: "50%" }}
             />
-            {/* Label */}
-            <span
-              className={`text-center leading-tight mt-2 ${
-                isCurrent ? "text-amber-400 font-semibold" : "text-slate-500"
+          );
+        })}
+      </div>
+
+      {/* ── Labels flex row — each label is flex-1 so names fit without overflow ── */}
+      <div className="flex w-full">
+        {stations.map((name, i) => {
+          const isCurrent = atStop && currentStop === name;
+          return (
+            <div
+              key={name}
+              className={`flex-1 leading-tight break-words ${
+                i === 0 ? "text-left pr-0.5" : i === nSegs ? "text-right pl-0.5" : "text-center px-0.5"
+              } ${
+                isCurrent ? "text-amber-400 font-bold" : "text-slate-500"
               }`}
-              style={{ fontSize: 9, maxWidth: 46, wordBreak: "break-word" }}
+              style={{ fontSize: 8.5 }}
             >
               {name}
-            </span>
-          </div>
-        );
-      })}
+            </div>
+          );
+        })}
+      </div>
+
     </div>
   );
 }
@@ -169,12 +172,14 @@ export default function BusCard({ data, routeLabel, stations, onCommand }: Props
       {/* ── Progress bars ── */}
       <div className="space-y-2">
         <ProgressBar
-          label="➡️  FORWARD  (St.1 → St.5)"
+          from={stations[0]}
+          to={stations[stations.length - 1]}
           value={data.direction === "FORWARD" ? data.progress : 0}
           color="bg-sky-400"
         />
         <ProgressBar
-          label="⬅️  RETURN   (St.5 → St.1)"
+          from={stations[stations.length - 1]}
+          to={stations[0]}
           value={data.direction === "RETURN" ? data.progress : 0}
           color="bg-violet-400"
         />
