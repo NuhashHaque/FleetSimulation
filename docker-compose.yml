@@ -169,6 +169,11 @@ services:
       - KAFKA_TELEMETRY_TOPIC=raw-telemetry
       - KAFKA_TELEMETRY_CONSUMER_GROUP=fastapi-sse-group
       - SERVICE_NAME=fastapi-gateway
+      - DB_HOST=timescaledb
+      - DB_PORT=5432
+      - DB_NAME=fleetdb
+      - DB_USER=fleet
+      - DB_PASSWORD=fleetpass
     networks:
       - fleet_net
     restart: on-failure

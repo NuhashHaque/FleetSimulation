@@ -3,14 +3,34 @@ from uuid import uuid4
 import asyncio
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 import orjson
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
-from app.config import KAFKA_COMMAND_TOPIC, SERVICE_NAME
+from app.config import (
+    DB_HOST,
+    DB_NAME,
+    DB_PASSWORD,
+    DB_PORT,
+    DB_USER,
+    KAFKA_COMMAND_TOPIC,
+    SERVICE_NAME,
+)
 from app.metrics import SSE_CLIENTS_CONNECTED, render_metrics
 from app.models import CommandAcceptedResponse, CommandRequest
 
 router = APIRouter()
+
+
+def get_db_connection():
+    return psycopg2.connect(
+        host=DB_HOST,
+        port=DB_PORT,
+        dbname=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD,
+    )
 
 
 @router.get("/health")
@@ -27,6 +47,261 @@ async def api_health():
 async def metrics():
     payload, content_type = render_metrics()
     return Response(content=payload, media_type=content_type)
+
+
+@router.get("/api/ops/telemetry/latest")
+async def ops_telemetry_latest(limit: int = 4):
+    safe_limit = max(1, min(limit, 100))
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT *
+                FROM (
+                    SELECT DISTINCT ON (bus_id)
+                        bus_id,
+                        telemetry_id,
+                        event_time,
+                        status,
+                        lat,
+                        lon,
+                        speed,
+                        direction,
+                        progress,
+                        full_trips,
+                        at_stop,
+                        current_stop,
+                        next_stop
+                    FROM telemetry
+                    ORDER BY bus_id, event_time DESC
+                ) latest
+                ORDER BY event_time DESC
+                LIMIT %s;
+                """,
+                (safe_limit,),
+            )
+            rows = cur.fetchall()
+        return {"count": len(rows), "items": rows}
+    finally:
+        conn.close()
+
+
+@router.get("/api/ops/telemetry/history")
+async def ops_telemetry_history(bus_id: str | None = None, limit: int = 100):
+    safe_limit = max(1, min(limit, 500))
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            if bus_id:
+                cur.execute(
+                    """
+                    SELECT
+                        bus_id,
+                        telemetry_id,
+                        event_time,
+                        status,
+                        lat,
+                        lon,
+                        speed,
+                        direction,
+                        progress,
+                        full_trips,
+                        at_stop,
+                        current_stop,
+                        next_stop
+                    FROM telemetry
+                    WHERE bus_id = %s
+                    ORDER BY event_time DESC
+                    LIMIT %s;
+                    """,
+                    (bus_id, safe_limit),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT
+                        bus_id,
+                        telemetry_id,
+                        event_time,
+                        status,
+                        lat,
+                        lon,
+                        speed,
+                        direction,
+                        progress,
+                        full_trips,
+                        at_stop,
+                        current_stop,
+                        next_stop
+                    FROM telemetry
+                    ORDER BY event_time DESC
+                    LIMIT %s;
+                    """,
+                    (safe_limit,),
+                )
+            rows = cur.fetchall()
+        return {"count": len(rows), "items": rows}
+    finally:
+        conn.close()
+
+
+@router.get("/api/ops/events")
+async def ops_events(bus_id: str | None = None, limit: int = 100):
+    safe_limit = max(1, min(limit, 500))
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            if bus_id:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM (
+                        SELECT
+                            event_time,
+                            bus_id,
+                            'status_transition' AS event_type,
+                            telemetry_id,
+                            from_status,
+                            to_status,
+                            NULL::INTEGER AS trip_count
+                        FROM status_history
+                        WHERE bus_id = %s
+                        UNION ALL
+                        SELECT
+                            event_time,
+                            bus_id,
+                            'trip_increment' AS event_type,
+                            telemetry_id,
+                            NULL::TEXT AS from_status,
+                            NULL::TEXT AS to_status,
+                            trip_count
+                        FROM trip_logs
+                        WHERE bus_id = %s
+                    ) e
+                    ORDER BY event_time DESC
+                    LIMIT %s;
+                    """,
+                    (bus_id, bus_id, safe_limit),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM (
+                        SELECT
+                            event_time,
+                            bus_id,
+                            'status_transition' AS event_type,
+                            telemetry_id,
+                            from_status,
+                            to_status,
+                            NULL::INTEGER AS trip_count
+                        FROM status_history
+                        UNION ALL
+                        SELECT
+                            event_time,
+                            bus_id,
+                            'trip_increment' AS event_type,
+                            telemetry_id,
+                            NULL::TEXT AS from_status,
+                            NULL::TEXT AS to_status,
+                            trip_count
+                        FROM trip_logs
+                    ) e
+                    ORDER BY event_time DESC
+                    LIMIT %s;
+                    """,
+                    (safe_limit,),
+                )
+            rows = cur.fetchall()
+        return {"count": len(rows), "items": rows}
+    finally:
+        conn.close()
+
+
+@router.get("/api/ops/ui", response_class=HTMLResponse)
+async def ops_ui():
+    return """
+<!doctype html>
+<html>
+<head>
+  <meta charset=\"utf-8\" />
+  <title>Fleet Ops Monitor</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; }
+    h2 { margin-top: 24px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+    th, td { border: 1px solid #ddd; padding: 8px; font-size: 13px; }
+    th { background: #f4f4f4; text-align: left; }
+    .row { display: flex; gap: 12px; align-items: center; }
+    button { padding: 6px 12px; }
+  </style>
+</head>
+<body>
+  <h1>Fleet Ops Monitor (TimescaleDB)</h1>
+  <div class=\"row\">
+    <label>Bus:</label>
+    <select id=\"busFilter\">
+      <option value=\"\">All</option>
+      <option>BUS_01</option>
+      <option>BUS_02</option>
+      <option>BUS_03</option>
+      <option>BUS_04</option>
+    </select>
+    <button onclick=\"loadAll()\">Refresh</button>
+  </div>
+
+  <h2>Latest Telemetry (4 buses)</h2>
+  <table id=\"latestTelemetry\"></table>
+
+  <h2>Recent Event Feed</h2>
+  <table id=\"eventFeed\"></table>
+
+  <script>
+    function tableFromItems(el, items, columns) {
+      const header = '<tr>' + columns.map(c => `<th>${c}</th>`).join('') + '</tr>';
+      const rows = items.map(i => '<tr>' + columns.map(c => `<td>${i[c] ?? ''}</td>`).join('') + '</tr>').join('');
+      el.innerHTML = header + rows;
+    }
+
+    async function loadTelemetry() {
+      const bus = document.getElementById('busFilter').value;
+      const url = bus
+        ? `/api/ops/telemetry/history?bus_id=${encodeURIComponent(bus)}&limit=20`
+        : '/api/ops/telemetry/latest?limit=4';
+      const data = await fetch(url).then(r => r.json());
+      tableFromItems(
+        document.getElementById('latestTelemetry'),
+        data.items,
+        ['event_time', 'bus_id', 'status', 'speed', 'direction', 'progress', 'full_trips', 'next_stop']
+      );
+    }
+
+    async function loadEvents() {
+      const bus = document.getElementById('busFilter').value;
+      const url = bus
+        ? `/api/ops/events?bus_id=${encodeURIComponent(bus)}&limit=30`
+        : '/api/ops/events?limit=30';
+      const data = await fetch(url).then(r => r.json());
+      tableFromItems(
+        document.getElementById('eventFeed'),
+        data.items,
+        ['event_time', 'bus_id', 'event_type', 'from_status', 'to_status', 'trip_count']
+      );
+    }
+
+    async function loadAll() {
+      await loadTelemetry();
+      await loadEvents();
+    }
+
+    loadAll();
+    setInterval(loadAll, 5000);
+  </script>
+</body>
+</html>
+    """
 
 
 @router.post("/api/command", response_model=CommandAcceptedResponse)
