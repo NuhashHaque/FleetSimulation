@@ -141,6 +141,27 @@ services:
       - fleet_net
     restart: on-failure
 
+  # ── Step 4: Kafka -> MQTT Outbound Bridge ──────────────────────────────────
+  kafka-to-mqtt-bridge:
+    build: ./services/kafka-to-mqtt-bridge
+    container_name: fleet_kafka_to_mqtt_bridge
+    depends_on:
+      kafka:
+        condition: service_started
+      mosquitto:
+        condition: service_healthy
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_COMMAND_TOPIC=fleet-commands
+      - KAFKA_GROUP_ID=mqtt-outbound-bridge-group
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+      - MQTT_QOS=1
+      - DEDUP_CACHE_SIZE=20000
+    networks:
+      - fleet_net
+    restart: on-failure
+
 networks:
   fleet_net:
     driver: bridge
