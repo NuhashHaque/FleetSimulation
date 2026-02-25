@@ -1,0 +1,19 @@
+{
+  "schema_version": "telemetry.v1",
+  "trace_id": "short",
+  "telemetry_id": "tel-20260225-0002",
+  "event_time": "not-a-date",
+  "bus_id": "BUS_XX",
+  "status": "MOVING",
+  "pos": {
+    "lat": 999,
+    "lon": 999
+  },
+  "speed": -10,
+  "direction": "SIDEWAYS",
+  "progress": 1.5,
+  "full_trips": -1,
+  "at_stop": "no",
+  "current_stop": 123,
+  "next_stop": true
+}

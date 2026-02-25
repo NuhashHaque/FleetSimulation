@@ -1,0 +1,22 @@
+{
+  "schema_version": "telemetry.v1",
+  "trace_id": "trace-a22f1b7d",
+  "telemetry_id": "tel-20260225-0001",
+  "event_time": "2026-02-25T16:40:01Z",
+  "bus_id": "BUS_01",
+  "status": "RUNNING",
+  "pos": {
+    "lat": 23.7982,
+    "lon": 90.3872
+  },
+  "speed": 47.3,
+  "direction": "FORWARD",
+  "progress": 0.35,
+  "full_trips": 1,
+  "at_stop": false,
+  "current_stop": null,
+  "next_stop": "Farmgate",
+  "metadata": {
+    "source": "mqtt-to-kafka-bridge"
+  }
+}

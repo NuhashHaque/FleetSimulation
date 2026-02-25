@@ -1,0 +1,12 @@
+{
+  "schema_version": "command.v1",
+  "trace_id": "trace-8b4f6c2a",
+  "command_id": "cmd-20260225-0001",
+  "event_time": "2026-02-25T16:40:00Z",
+  "bus_id": "BUS_01",
+  "action": "PAUSE",
+  "user_id": "admin_1",
+  "metadata": {
+    "source": "fastapi-gateway"
+  }
+}

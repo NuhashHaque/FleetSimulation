@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fleet.command.v1",
+  "title": "Fleet Command Event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "trace_id",
+    "command_id",
+    "event_time",
+    "bus_id",
+    "action",
+    "user_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "command.v1"
+    },
+    "trace_id": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 128
+    },
+    "command_id": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 128
+    },
+    "event_time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "bus_id": {
+      "type": "string",
+      "pattern": "^BUS_[0-9]{2}$"
+    },
+    "action": {
+      "type": "string",
+      "enum": ["START", "PAUSE", "STOP", "RESTART"]
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

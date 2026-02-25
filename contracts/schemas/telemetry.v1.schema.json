@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fleet.telemetry.v1",
+  "title": "Fleet Telemetry Event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "trace_id",
+    "telemetry_id",
+    "event_time",
+    "bus_id",
+    "status",
+    "pos",
+    "speed",
+    "direction",
+    "progress",
+    "full_trips",
+    "at_stop",
+    "current_stop",
+    "next_stop"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "telemetry.v1"
+    },
+    "trace_id": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 128
+    },
+    "telemetry_id": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 128
+    },
+    "event_time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "bus_id": {
+      "type": "string",
+      "pattern": "^BUS_[0-9]{2}$"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["IDLE", "RUNNING", "PAUSED"]
+    },
+    "pos": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lat", "lon"],
+      "properties": {
+        "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+        "lon": { "type": "number", "minimum": -180, "maximum": 180 }
+      }
+    },
+    "speed": {
+      "type": "number",
+      "minimum": 0
+    },
+    "direction": {
+      "type": "string",
+      "enum": ["FORWARD", "RETURN"]
+    },
+    "progress": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "full_trips": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "at_stop": {
+      "type": "boolean"
+    },
+    "current_stop": {
+      "type": ["string", "null"]
+    },
+    "next_stop": {
+      "type": "string"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}
