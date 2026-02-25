@@ -1,10 +1,11 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import orjson
 import psycopg2
 from aiokafka import AIOKafkaConsumer
+from prometheus_client import Counter, Gauge, start_http_server
 from psycopg2.extras import Json
 
 from app.config import (
@@ -17,7 +18,14 @@ from app.config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_GROUP_ID,
     KAFKA_TELEMETRY_TOPIC,
+    METRICS_PORT,
 )
+
+
+MESSAGES_TOTAL = Counter("fleet_messages_processed_total", "Total messages processed")
+PROCESSING_ERRORS_TOTAL = Counter("fleet_processing_errors_total", "Total processing errors")
+DUPLICATES_TOTAL = Counter("fleet_duplicates_skipped_total", "Total duplicate messages skipped")
+EVENT_AGE_SECONDS = Gauge("fleet_event_age_seconds", "Age of latest processed event in seconds")
 
 
 def get_connection():
@@ -69,6 +77,11 @@ def parse_event_time(value: Any) -> datetime:
     if not isinstance(value, str):
         raise ValueError("event_time must be string")
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def update_event_age(event_time: datetime):
+    age = (datetime.now(timezone.utc) - event_time.astimezone(timezone.utc)).total_seconds()
+    EVENT_AGE_SECONDS.set(max(age, 0.0))
 
 
 def validate_telemetry(payload: dict[str, Any]) -> dict[str, Any]:
@@ -148,6 +161,9 @@ def insert_telemetry(conn, row: dict[str, Any]) -> bool:
 
 
 async def run():
+    start_http_server(METRICS_PORT)
+    print(f"[telemetry-etl] metrics server started on :{METRICS_PORT}")
+
     conn = get_connection()
     ensure_schema(conn)
 
@@ -170,13 +186,18 @@ async def run():
 
                 row = validate_telemetry(payload)
                 inserted = insert_telemetry(conn, row)
+                update_event_age(row["event_time"])
+                MESSAGES_TOTAL.inc()
+                trace_id = payload.get("trace_id", "")
                 if inserted:
-                    print(f"[telemetry-etl] inserted telemetry_id={row['telemetry_id']}")
+                    print(f"[telemetry-etl] trace_id={trace_id} inserted telemetry_id={row['telemetry_id']}")
                 else:
-                    print(f"[telemetry-etl] duplicate skipped telemetry_id={row['telemetry_id']}")
+                    DUPLICATES_TOTAL.inc()
+                    print(f"[telemetry-etl] trace_id={trace_id} duplicate skipped telemetry_id={row['telemetry_id']}")
                 await consumer.commit()
             except Exception as exc:
                 print(f"[telemetry-etl] failed at offset {msg.offset}: {exc}")
+                PROCESSING_ERRORS_TOTAL.inc()
                 await consumer.commit()
     finally:
         await consumer.stop()

@@ -90,6 +90,36 @@ services:
     networks:
       - fleet_net
 
+  # ── Step 10: Observability (Prometheus) ───────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.53.1
+    container_name: fleet_prometheus
+    depends_on:
+      fastapi-gateway:
+        condition: service_started
+      mqtt-to-kafka-bridge:
+        condition: service_started
+      kafka-to-mqtt-bridge:
+        condition: service_started
+      timescaledb-audit-etl:
+        condition: service_started
+      timescaledb-telemetry-etl:
+        condition: service_started
+      timescaledb-event-etl:
+        condition: service_started
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    volumes:
+      - ./infra/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/observability/alert.rules.yml:/etc/prometheus/alert.rules.yml:ro
+    ports:
+      - "9090:9090"
+    networks:
+      - fleet_net
+    restart: on-failure
+
   # ── Step 1 Infra: TimescaleDB ───────────────────────────────────────────────
   timescaledb:
     image: timescale/timescaledb:2.14.2-pg15
@@ -160,6 +190,7 @@ services:
       - MQTT_PORT=1883
       - MQTT_QOS=1
       - DEDUP_CACHE_SIZE=20000
+      - METRICS_PORT=9102
     networks:
       - fleet_net
     restart: on-failure
@@ -183,6 +214,7 @@ services:
       - DB_NAME=fleetdb
       - DB_USER=fleet
       - DB_PASSWORD=fleetpass
+      - METRICS_PORT=9103
     networks:
       - fleet_net
     restart: on-failure
@@ -204,6 +236,7 @@ services:
       - KAFKA_TELEMETRY_TOPIC=raw-telemetry
       - KAFKA_DLQ_TOPIC=raw-telemetry-dlq
       - SERVICE_NAME=mqtt-to-kafka-bridge
+      - METRICS_PORT=9101
     networks:
       - fleet_net
     restart: on-failure
@@ -227,6 +260,7 @@ services:
       - DB_NAME=fleetdb
       - DB_USER=fleet
       - DB_PASSWORD=fleetpass
+      - METRICS_PORT=9104
     networks:
       - fleet_net
     restart: on-failure
@@ -250,6 +284,7 @@ services:
       - DB_NAME=fleetdb
       - DB_USER=fleet
       - DB_PASSWORD=fleetpass
+      - METRICS_PORT=9105
     networks:
       - fleet_net
     restart: on-failure

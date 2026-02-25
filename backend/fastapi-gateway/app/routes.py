@@ -3,10 +3,11 @@ from uuid import uuid4
 import asyncio
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 import orjson
 
 from app.config import KAFKA_COMMAND_TOPIC, SERVICE_NAME
+from app.metrics import SSE_CLIENTS_CONNECTED, render_metrics
 from app.models import CommandAcceptedResponse, CommandRequest
 
 router = APIRouter()
@@ -22,13 +23,20 @@ async def api_health():
     return {"status": "ok", "service": SERVICE_NAME}
 
 
+@router.get("/metrics")
+async def metrics():
+    payload, content_type = render_metrics()
+    return Response(content=payload, media_type=content_type)
+
+
 @router.post("/api/command", response_model=CommandAcceptedResponse)
 async def command(request: Request, body: CommandRequest):
     producer = request.app.state.command_producer
     if producer is None:
         raise HTTPException(status_code=503, detail="Kafka producer not ready")
 
-    trace_id = body.trace_id or f"trace-{uuid4()}"
+    request_trace_id = getattr(request.state, "trace_id", None)
+    trace_id = body.trace_id or request_trace_id or f"trace-{uuid4()}"
     command_id = body.command_id or f"cmd-{uuid4()}"
 
     event = {
@@ -45,6 +53,7 @@ async def command(request: Request, body: CommandRequest):
     }
 
     await producer.publish(KAFKA_COMMAND_TOPIC, key=body.bus_id, payload=event)
+    print(f"[fastapi] trace_id={trace_id} command_id={command_id} accepted bus_id={body.bus_id} action={body.action}")
 
     return CommandAcceptedResponse(
         accepted=True,
@@ -60,6 +69,9 @@ async def command(request: Request, body: CommandRequest):
 async def sse_telemetry(request: Request, snapshot: bool = True):
     hub = request.app.state.telemetry_hub
     queue = await hub.subscribe()
+    SSE_CLIENTS_CONNECTED.inc()
+    trace_id = getattr(request.state, "trace_id", None)
+    print(f"[fastapi-sse] trace_id={trace_id} client connected snapshot={snapshot}")
 
     async def event_stream():
         try:
@@ -80,6 +92,8 @@ async def sse_telemetry(request: Request, snapshot: bool = True):
                     yield ": keepalive\n\n"
         finally:
             await hub.unsubscribe(queue)
+            SSE_CLIENTS_CONNECTED.dec()
+            print(f"[fastapi-sse] trace_id={trace_id} client disconnected")
 
     headers = {
         "Cache-Control": "no-cache",

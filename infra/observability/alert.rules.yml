@@ -1,0 +1,38 @@
+groups:
+  - name: fleet-observability
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service down: {{ $labels.job }}"
+          description: "Prometheus cannot scrape {{ $labels.job }} for 30s"
+
+      - alert: BridgeDLQSpiking
+        expr: increase(mqtt_to_kafka_dlq_total[1m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Telemetry DLQ messages detected"
+          description: "mqtt-to-kafka bridge published invalid telemetry to DLQ in the last minute"
+
+      - alert: ConsumerLagHigh
+        expr: max by (job) (fleet_event_age_seconds) > 45
+        for: 60s
+        labels:
+          severity: warning
+        annotations:
+          summary: "High event age in {{ $labels.job }}"
+          description: "Event age indicates potential consumer lag (>45s)"
+
+      - alert: WorkerProcessingErrors
+        expr: increase(fleet_processing_errors_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Processing errors in {{ $labels.job }}"
+          description: "One or more messages failed processing in the last 5 minutes"

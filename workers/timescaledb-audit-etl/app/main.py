@@ -1,10 +1,11 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import orjson
 import psycopg2
 from aiokafka import AIOKafkaConsumer
+from prometheus_client import Counter, Gauge, start_http_server
 from psycopg2.extras import Json
 
 from app.config import (
@@ -17,7 +18,14 @@ from app.config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_COMMAND_TOPIC,
     KAFKA_GROUP_ID,
+    METRICS_PORT,
 )
+
+
+MESSAGES_TOTAL = Counter("fleet_messages_processed_total", "Total messages processed")
+PROCESSING_ERRORS_TOTAL = Counter("fleet_processing_errors_total", "Total processing errors")
+DUPLICATES_TOTAL = Counter("fleet_duplicates_skipped_total", "Total duplicate messages skipped")
+EVENT_AGE_SECONDS = Gauge("fleet_event_age_seconds", "Age of latest processed event in seconds")
 
 
 def get_connection():
@@ -54,6 +62,11 @@ def parse_event_time(value: Any) -> datetime:
     if not isinstance(value, str):
         raise ValueError("event_time must be string")
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def update_event_age(event_time: datetime):
+    age = (datetime.now(timezone.utc) - event_time.astimezone(timezone.utc)).total_seconds()
+    EVENT_AGE_SECONDS.set(max(age, 0.0))
 
 
 def validate_command(payload: dict[str, Any]) -> dict[str, Any]:
@@ -107,6 +120,9 @@ def insert_command(conn, event: dict[str, Any]) -> bool:
 
 
 async def run():
+    start_http_server(METRICS_PORT)
+    print(f"[audit-etl] metrics server started on :{METRICS_PORT}")
+
     conn = get_connection()
     ensure_schema(conn)
 
@@ -129,15 +145,19 @@ async def run():
 
                 event = validate_command(payload)
                 inserted = insert_command(conn, event)
+                update_event_age(event["event_time"])
+                MESSAGES_TOTAL.inc()
 
                 if inserted:
-                    print(f"[audit-etl] inserted command_id={event['command_id']}")
+                    print(f"[audit-etl] trace_id={event['trace_id']} inserted command_id={event['command_id']}")
                 else:
-                    print(f"[audit-etl] duplicate skipped command_id={event['command_id']}")
+                    DUPLICATES_TOTAL.inc()
+                    print(f"[audit-etl] trace_id={event['trace_id']} duplicate skipped command_id={event['command_id']}")
 
                 await consumer.commit()
             except Exception as exc:
                 print(f"[audit-etl] failed at offset {msg.offset}: {exc}")
+                PROCESSING_ERRORS_TOTAL.inc()
                 await consumer.commit()
     finally:
         await consumer.stop()

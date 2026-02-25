@@ -9,3 +9,4 @@ MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 MQTT_QOS = int(os.getenv("MQTT_QOS", "1"))
 
 DEDUP_CACHE_SIZE = int(os.getenv("DEDUP_CACHE_SIZE", "20000"))
+METRICS_PORT = int(os.getenv("METRICS_PORT", "9102"))

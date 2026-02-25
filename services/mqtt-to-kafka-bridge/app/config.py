@@ -9,3 +9,4 @@ KAFKA_TELEMETRY_TOPIC = os.getenv("KAFKA_TELEMETRY_TOPIC", "raw-telemetry")
 KAFKA_DLQ_TOPIC = os.getenv("KAFKA_DLQ_TOPIC", "raw-telemetry-dlq")
 
 SERVICE_NAME = os.getenv("SERVICE_NAME", "mqtt-to-kafka-bridge")
+METRICS_PORT = int(os.getenv("METRICS_PORT", "9101"))
