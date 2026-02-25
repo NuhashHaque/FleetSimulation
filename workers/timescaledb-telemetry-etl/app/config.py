@@ -1,0 +1,12 @@
+import os
+
+KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+KAFKA_TELEMETRY_TOPIC = os.getenv("KAFKA_TELEMETRY_TOPIC", "raw-telemetry")
+KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "timescaledb-telemetry-etl-group")
+KAFKA_AUTO_OFFSET_RESET = os.getenv("KAFKA_AUTO_OFFSET_RESET", "latest")
+
+DB_HOST = os.getenv("DB_HOST", "timescaledb")
+DB_PORT = int(os.getenv("DB_PORT", "5432"))
+DB_NAME = os.getenv("DB_NAME", "fleetdb")
+DB_USER = os.getenv("DB_USER", "fleet")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "fleetpass")

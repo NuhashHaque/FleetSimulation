@@ -208,6 +208,29 @@ services:
       - fleet_net
     restart: on-failure
 
+  # ── Step 8: TimescaleDB Telemetry ETL ──────────────────────────────────────
+  timescaledb-telemetry-etl:
+    build: ./workers/timescaledb-telemetry-etl
+    container_name: fleet_timescaledb_telemetry_etl
+    depends_on:
+      kafka:
+        condition: service_started
+      timescaledb:
+        condition: service_healthy
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TELEMETRY_TOPIC=raw-telemetry
+      - KAFKA_GROUP_ID=timescaledb-telemetry-etl-group
+      - KAFKA_AUTO_OFFSET_RESET=latest
+      - DB_HOST=timescaledb
+      - DB_PORT=5432
+      - DB_NAME=fleetdb
+      - DB_USER=fleet
+      - DB_PASSWORD=fleetpass
+    networks:
+      - fleet_net
+    restart: on-failure
+
 networks:
   fleet_net:
     driver: bridge
