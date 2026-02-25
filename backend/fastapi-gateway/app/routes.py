@@ -3,7 +3,7 @@ from uuid import uuid4
 import asyncio
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, Response, StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 import orjson
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -220,88 +220,6 @@ async def ops_events(bus_id: str | None = None, limit: int = 100):
         conn.close()
 
 
-@router.get("/api/ops/ui", response_class=HTMLResponse)
-async def ops_ui():
-    return """
-<!doctype html>
-<html>
-<head>
-  <meta charset=\"utf-8\" />
-  <title>Fleet Ops Monitor</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 24px; }
-    h2 { margin-top: 24px; }
-    table { border-collapse: collapse; width: 100%; margin-top: 8px; }
-    th, td { border: 1px solid #ddd; padding: 8px; font-size: 13px; }
-    th { background: #f4f4f4; text-align: left; }
-    .row { display: flex; gap: 12px; align-items: center; }
-    button { padding: 6px 12px; }
-  </style>
-</head>
-<body>
-  <h1>Fleet Ops Monitor (TimescaleDB)</h1>
-  <div class=\"row\">
-    <label>Bus:</label>
-    <select id=\"busFilter\">
-      <option value=\"\">All</option>
-      <option>BUS_01</option>
-      <option>BUS_02</option>
-      <option>BUS_03</option>
-      <option>BUS_04</option>
-    </select>
-    <button onclick=\"loadAll()\">Refresh</button>
-  </div>
-
-  <h2>Latest Telemetry (4 buses)</h2>
-  <table id=\"latestTelemetry\"></table>
-
-  <h2>Recent Event Feed</h2>
-  <table id=\"eventFeed\"></table>
-
-  <script>
-    function tableFromItems(el, items, columns) {
-      const header = '<tr>' + columns.map(c => `<th>${c}</th>`).join('') + '</tr>';
-      const rows = items.map(i => '<tr>' + columns.map(c => `<td>${i[c] ?? ''}</td>`).join('') + '</tr>').join('');
-      el.innerHTML = header + rows;
-    }
-
-    async function loadTelemetry() {
-      const bus = document.getElementById('busFilter').value;
-      const url = bus
-        ? `/api/ops/telemetry/history?bus_id=${encodeURIComponent(bus)}&limit=20`
-        : '/api/ops/telemetry/latest?limit=4';
-      const data = await fetch(url).then(r => r.json());
-      tableFromItems(
-        document.getElementById('latestTelemetry'),
-        data.items,
-        ['event_time', 'bus_id', 'status', 'speed', 'direction', 'progress', 'full_trips', 'next_stop']
-      );
-    }
-
-    async function loadEvents() {
-      const bus = document.getElementById('busFilter').value;
-      const url = bus
-        ? `/api/ops/events?bus_id=${encodeURIComponent(bus)}&limit=30`
-        : '/api/ops/events?limit=30';
-      const data = await fetch(url).then(r => r.json());
-      tableFromItems(
-        document.getElementById('eventFeed'),
-        data.items,
-        ['event_time', 'bus_id', 'event_type', 'from_status', 'to_status', 'trip_count']
-      );
-    }
-
-    async function loadAll() {
-      await loadTelemetry();
-      await loadEvents();
-    }
-
-    loadAll();
-    setInterval(loadAll, 5000);
-  </script>
-</body>
-</html>
-    """
 
 
 @router.post("/api/command", response_model=CommandAcceptedResponse)

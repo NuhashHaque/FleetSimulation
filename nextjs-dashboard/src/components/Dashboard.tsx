@@ -126,15 +126,20 @@ export default function Dashboard() {
             Broker: <code className="text-sky-400">{BROKER_WS}</code>
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-full border border-slate-700 px-4 py-1.5 text-sm">
-          <span
-            className={`inline-block h-2.5 w-2.5 rounded-full ${
-              connected ? "bg-emerald-400 animate-pulse" : "bg-red-500"
-            }`}
-          />
-          <span className={connected ? "text-emerald-400" : "text-red-400"}>
-            {connected ? "Connected" : "Disconnected"}
-          </span>
+        <div className="flex items-center gap-3">
+          <a href="/ops" className="rounded-md border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800">
+            TimescaleDB Monitor
+          </a>
+          <div className="flex items-center gap-2 rounded-full border border-slate-700 px-4 py-1.5 text-sm">
+            <span
+              className={`inline-block h-2.5 w-2.5 rounded-full ${
+                connected ? "bg-emerald-400 animate-pulse" : "bg-red-500"
+              }`}
+            />
+            <span className={connected ? "text-emerald-400" : "text-red-400"}>
+              {connected ? "Connected" : "Disconnected"}
+            </span>
+          </div>
         </div>
       </div>
 
