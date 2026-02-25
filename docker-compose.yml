@@ -231,6 +231,29 @@ services:
       - fleet_net
     restart: on-failure
 
+  # ── Step 9: TimescaleDB Event ETL ──────────────────────────────────────────
+  timescaledb-event-etl:
+    build: ./workers/timescaledb-event-etl
+    container_name: fleet_timescaledb_event_etl
+    depends_on:
+      kafka:
+        condition: service_started
+      timescaledb:
+        condition: service_healthy
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TELEMETRY_TOPIC=raw-telemetry
+      - KAFKA_GROUP_ID=timescaledb-event-etl-group
+      - KAFKA_AUTO_OFFSET_RESET=latest
+      - DB_HOST=timescaledb
+      - DB_PORT=5432
+      - DB_NAME=fleetdb
+      - DB_USER=fleet
+      - DB_PASSWORD=fleetpass
+    networks:
+      - fleet_net
+    restart: on-failure
+
 networks:
   fleet_net:
     driver: bridge
