@@ -185,6 +185,27 @@ services:
       - fleet_net
     restart: on-failure
 
+  # ── Step 6: MQTT -> Kafka Telemetry Bridge ─────────────────────────────────
+  mqtt-to-kafka-bridge:
+    build: ./services/mqtt-to-kafka-bridge
+    container_name: fleet_mqtt_to_kafka_bridge
+    depends_on:
+      kafka:
+        condition: service_started
+      mosquitto:
+        condition: service_healthy
+    environment:
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+      - MQTT_TOPIC=fleet/bus/+/telemetry
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TELEMETRY_TOPIC=raw-telemetry
+      - KAFKA_DLQ_TOPIC=raw-telemetry-dlq
+      - SERVICE_NAME=mqtt-to-kafka-bridge
+    networks:
+      - fleet_net
+    restart: on-failure
+
 networks:
   fleet_net:
     driver: bridge
