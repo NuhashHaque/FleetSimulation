@@ -1,5 +1,4 @@
 services:
-  # ── Phase 1: MQTT Broker ─────────────────────────────────────────────────────
   mosquitto:
     image: eclipse-mosquitto:2.0
     container_name: fleet_broker
@@ -18,7 +17,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── Phase 2: Simulation Engine ───────────────────────────────────────────────
   simulator:
     build: ./simulator
     container_name: fleet_simulator
@@ -32,7 +30,6 @@ services:
       - fleet_net
     restart: on-failure
 
-  # ── Next.js Control Room (primary UI) ───────────────────────────────────────
   nextjs-dashboard:
     build: ./nextjs-dashboard
     container_name: fleet_nextjs
@@ -48,7 +45,6 @@ services:
       - fleet_net
     restart: on-failure
 
-  # ── Step 1 Infra: Kafka (single-node KRaft) ────────────────────────────────
   kafka:
     image: confluentinc/cp-kafka:7.6.1
     container_name: fleet_kafka
@@ -74,7 +70,6 @@ services:
     networks:
       - fleet_net
 
-  # ── Step 1 Infra: Schema Registry ───────────────────────────────────────────
   schema-registry:
     image: confluentinc/cp-schema-registry:7.6.1
     container_name: fleet_schema_registry
@@ -90,7 +85,6 @@ services:
     networks:
       - fleet_net
 
-  # ── Step 10: Observability (Prometheus) ───────────────────────────────────
   prometheus:
     image: prom/prometheus:v2.53.1
     container_name: fleet_prometheus
@@ -120,7 +114,6 @@ services:
       - fleet_net
     restart: on-failure
 
-  # ── Step 1 Infra: TimescaleDB ───────────────────────────────────────────────
   timescaledb:
     image: timescale/timescaledb:2.14.2-pg15
     container_name: fleet_timescaledb
@@ -140,7 +133,6 @@ services:
       timeout: 5s
       retries: 10
 
-  # ── Step 1 Infra: Nginx Gateway (API + SSE entrypoint) ─────────────────────
   nginx:
     image: nginx:1.27-alpine
     container_name: fleet_nginx
@@ -156,7 +148,6 @@ services:
       - fleet_net
     restart: on-failure
 
-  # ── Step 3: FastAPI Command Gateway ─────────────────────────────────────────
   fastapi-gateway:
     build: ./backend/fastapi-gateway
     container_name: fleet_fastapi_gateway
@@ -178,7 +169,6 @@ services:
       - fleet_net
     restart: on-failure
 
-  # ── Step 4: Kafka -> MQTT Outbound Bridge ──────────────────────────────────
   kafka-to-mqtt-bridge:
     build: ./services/kafka-to-mqtt-bridge
     container_name: fleet_kafka_to_mqtt_bridge
@@ -200,7 +190,6 @@ services:
       - fleet_net
     restart: on-failure
 
-  # ── Step 5: TimescaleDB Command Audit ETL ──────────────────────────────────
   timescaledb-audit-etl:
     build: ./workers/timescaledb-audit-etl
     container_name: fleet_timescaledb_audit_etl
@@ -224,7 +213,6 @@ services:
       - fleet_net
     restart: on-failure
 
-  # ── Step 6: MQTT -> Kafka Telemetry Bridge ─────────────────────────────────
   mqtt-to-kafka-bridge:
     build: ./services/mqtt-to-kafka-bridge
     container_name: fleet_mqtt_to_kafka_bridge
@@ -246,7 +234,6 @@ services:
       - fleet_net
     restart: on-failure
 
-  # ── Step 8: TimescaleDB Telemetry ETL ──────────────────────────────────────
   timescaledb-telemetry-etl:
     build: ./workers/timescaledb-telemetry-etl
     container_name: fleet_timescaledb_telemetry_etl
@@ -270,7 +257,6 @@ services:
       - fleet_net
     restart: on-failure
 
-  # ── Step 9: TimescaleDB Event ETL ──────────────────────────────────────────
   timescaledb-event-etl:
     build: ./workers/timescaledb-event-etl
     container_name: fleet_timescaledb_event_etl
